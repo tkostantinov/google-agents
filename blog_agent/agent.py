@@ -1,13 +1,18 @@
 # agent.py
 
 import os
+import re
 import datetime
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from google.adk.agents import Agent, LoopAgent
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools import agent_tool
+
+OUTPUT_DIR = Path(__file__).parent / "output"
 
 # Load environment variables from .env file
 
@@ -120,6 +125,33 @@ robust_blog_writer = LoopAgent(
 planner_tool = agent_tool.AgentTool(agent=robust_blog_planner)
 writer_tool = agent_tool.AgentTool(agent=robust_blog_writer)
 
+
+def _slugify_title(blog_post: str) -> str:
+    """Extracts the first Markdown heading from the post and turns it into a filename-safe slug."""
+    for line in blog_post.splitlines():
+        line = line.strip()
+        if line.startswith("#"):
+            title = line.lstrip("#").strip()
+            title = title.replace("*", "").replace("_", "")
+            slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+            if slug:
+                return slug[:60].rstrip("-")
+    return "blog-post"
+
+
+def save_blog_post_callback(callback_context: CallbackContext) -> None:
+    """Writes state['blog_post'] to blog_agent/output/ once the root agent finishes."""
+    blog_post = callback_context.state.get("blog_post")
+    if not blog_post:
+        return
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    slug = _slugify_title(blog_post)
+    output_path = OUTPUT_DIR / f"{slug}_{timestamp}.md"
+    output_path.write_text(blog_post)
+    print(f"[save_blog_post_callback] Saved blog post to {output_path}")
+
 root_agent = Agent(
     name="RootAgent",
     model=MODEL,
@@ -141,5 +173,6 @@ Date: {datetime.datetime.now().strftime("%Y-%m-%d")}
         planner_tool, # calls the RobustBlogPlanner sub-agent
         writer_tool, # calls the RobustBlogWriter sub-agent
         ],
+    after_agent_callback=save_blog_post_callback,
 )
 
