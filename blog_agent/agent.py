@@ -13,11 +13,23 @@ from google.adk.tools import agent_tool
 
 load_dotenv()
 
-# Ollama runs in Docker (see README.md); point litellm's ollama_chat provider at it.
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
-os.environ.setdefault("OLLAMA_API_BASE", os.getenv("OLLAMA_API_BASE", "http://localhost:11434"))
+# Mistral API (see README.md). litellm reads MISTRAL_API_KEY from the environment automatically.
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
 
-MODEL = LiteLlm(model=f"ollama_chat/{OLLAMA_MODEL}")
+# This pipeline makes several rapid, sequential calls per request; automatic
+# retry-with-backoff absorbs 429s from the API's own rate limit (this key is
+# capped at 4 requests/minute, so retries need to span past a minute boundary).
+MODEL = LiteLlm(
+    model=f"mistral/{MISTRAL_MODEL}",
+    num_retries=10,
+    retry_strategy="exponential_backoff_retry",
+)
+
+# Ollama runs in Docker (see README.md); point litellm's ollama_chat provider at it.
+# OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
+# os.environ.setdefault("OLLAMA_API_BASE", os.getenv("OLLAMA_API_BASE", "http://localhost:11434"))
+
+# MODEL = LiteLlm(model=f"ollama_chat/{OLLAMA_MODEL}")
 
 
 # --- Sub-Agent Planner ---
